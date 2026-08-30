@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch Nextcloud Website/theme for mascot media
+
+[Path]
+PathChanged=/mnt/data/ncdata/musicuser/files/Website/theme
+PathModified=/mnt/data/ncdata/musicuser/files/Website/theme
+Unit=theme-builder.service
+MakeDirectory=false
+
+[Install]
+WantedBy=multi-user.target

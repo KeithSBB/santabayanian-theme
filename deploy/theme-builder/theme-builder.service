@@ -1,0 +1,15 @@
+[Unit]
+Description=Copy Santa Bayanian theme media from Nextcloud
+After=network.target
+
+[Service]
+Type=oneshot
+User=nginx
+Group=nginx
+EnvironmentFile=-/etc/santabayanian/blog-builder.env
+EnvironmentFile=/etc/santabayanian/theme-builder.env
+ExecStart=/usr/bin/python3 /var/www/santabayanian/scripts/build-theme.py
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
