@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Copy Nextcloud Website/theme media into the public site."""
+"""Copy Nextcloud Website/theme media into the public site.
+
+PNG/WebP/GIF keep their alpha. JPEG stills stay JPEG.
+"""
 from __future__ import annotations
 import json, os, re, shutil, subprocess, sys, time
 from pathlib import Path
@@ -8,9 +11,10 @@ ROOT = Path(os.environ.get("BLOG_WEBROOT", os.environ.get("THEME_WEBROOT", "/var
 NC_DEFAULT = Path("/mnt/data/ncdata/musicuser/files/Website/theme")
 ORIGIN = os.environ.get("BLOG_ORIGIN", "https://santabayanian.com")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".gif"}
+ALPHA_EXT = {".png", ".webp", ".gif"}
 VIDEO_EXT = {".mp4", ".mov", ".webm", ".m4v"}
 SKIP_DIRS = {"masters", "master", "raw", "drafts", "export"}
-RESERVED_STILL = {"mascot": "mascot.jpg", "hero": "mascot.jpg", "poster": "mascot.jpg", "about": "about.jpg", "about-photo": "about.jpg", "og": "og.jpg"}
+RESERVED_STILL = {"mascot": "mascot", "hero": "mascot", "poster": "mascot", "r5": "mascot", "about": "about", "about-photo": "about", "og": "og"}
 RESERVED_VIDEO = {"mascot-mist": "mascot-mist.mp4", "mist": "mascot-mist.mp4", "hero": "mascot-mist.mp4", "mascot-roots": "mascot-roots.mp4", "roots": "mascot-roots.mp4", "mascot-fire": "mascot-fire.mp4", "fire": "mascot-fire.mp4", "demon": "mascot-fire.mp4"}
 GALLERY_HTML = "<!-- theme:mascot-start -->\n<section class=\"wrap section mascot-band\" data-mascot-reel>\n  <div class=\"section-head\"><div><p class=\"kicker\">The player</p><h2>Santa Bayanian</h2></div></div>\n  <div class=\"mascot-reel\" data-mascot-grid></div>\n</section>\n<!-- theme:mascot-end -->\n"
 
@@ -39,6 +43,12 @@ def dest_site():
 def dest_gallery():
     return dest_site() / "mascot"
 
+def keep_alpha(src):
+    return src.suffix.lower() in ALPHA_EXT
+
+def out_ext(src):
+    return ".png" if keep_alpha(src) else ".jpg"
+
 def run(cmd):
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -62,17 +72,19 @@ def role_video(stem):
         return "mascot-fire.mp4"
     return None
 
-def role_still(stem):
+def role_still(stem, src):
     s = slugify(stem)
-    if s in RESERVED_STILL:
-        return RESERVED_STILL[s]
-    if "about" in s:
-        return "about.jpg"
-    if s in {"og", "opengraph", "share"}:
-        return "og.jpg"
-    if s in {"mascot", "hero", "poster", "r5"}:
-        return "mascot.jpg"
-    return None
+    base = RESERVED_STILL.get(s)
+    if not base:
+        if "about" in s:
+            base = "about"
+        elif s in {"og", "opengraph", "share"}:
+            base = "og"
+        elif s in {"mascot", "hero", "poster", "r5"}:
+            base = "mascot"
+    if not base:
+        return None
+    return base + out_ext(src)
 
 def iter_media(folder):
     for dirpath, dirnames, filenames in os.walk(folder):
@@ -86,11 +98,17 @@ def iter_media(folder):
 
 def optimize_image(src, dst, max_w=1800):
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.suffix.lower() not in {".jpg", ".jpeg"}:
-        dst = dst.with_suffix(".jpg")
+    dst = dst.with_suffix(out_ext(src))
     if not newer(src, dst) and dst.exists():
         return False
     ffmpeg = which("ffmpeg")
+    if keep_alpha(src):
+        if ffmpeg and run([ffmpeg, "-y", "-i", str(src), "-vf", "scale='min(%d,iw)':-2" % max_w, "-pix_fmt", "rgba", str(dst)]):
+            os.chmod(dst, 0o644)
+            return True
+        shutil.copy2(src, dst)
+        os.chmod(dst, 0o644)
+        return True
     if ffmpeg and run([ffmpeg, "-y", "-i", str(src), "-vf", "scale='min(%d,iw)':-2" % max_w, "-q:v", "3", "-update", "1", "-frames:v", "1", str(dst)]):
         os.chmod(dst, 0o644)
         return True
@@ -134,6 +152,10 @@ def patch_index(index_path, theme):
     original = html
     html = ensure_link(html, '<link rel="stylesheet" href="/css/theme.css">')
     html = ensure_link(html, '<script src="/js/theme.js" defer></script>')
+    poster = theme.get("poster") or ""
+    if poster:
+        html = html.replace("/images/site/mascot.jpg", poster)
+        html = html.replace("/images/site/mascot.png", poster)
     if "<!-- theme:mascot-start -->" not in html:
         if "<!-- rm:recent-start -->" in html:
             html = html.replace("<!-- rm:recent-start -->", GALLERY_HTML + "\n<!-- rm:recent-start -->", 1)
@@ -186,14 +208,14 @@ def main():
         if ext in IMAGE_EXT:
             if first_still is None:
                 first_still = src
-            gdest = gallery / (name + ".jpg")
+            gdest = gallery / (name + out_ext(src))
             if optimize_image(src, gdest):
                 copied += 1
                 log("still  %s -> /images/site/mascot/%s" % (src.name, gdest.name))
             stills.append({"src": "/images/site/mascot/%s" % gdest.name, "name": stem})
-            reserved = role_still(stem)
+            reserved = role_still(stem, src)
             if reserved and reserved not in assigned:
-                if optimize_image(src, site / reserved, max_w=1200 if reserved == "og.jpg" else 1800):
+                if optimize_image(src, site / reserved, max_w=1200 if reserved.startswith("og.") else 1800):
                     copied += 1
                 assigned[reserved] = "/images/site/%s" % reserved
                 log("role   %s" % reserved)
@@ -211,21 +233,28 @@ def main():
                     copied += 1
                 assigned[reserved] = "/images/site/%s" % reserved
                 log("role   %s" % reserved)
-    if "mascot.jpg" not in assigned and first_still is not None:
-        optimize_image(first_still, site / "mascot.jpg")
-        assigned["mascot.jpg"] = "/images/site/mascot.jpg"
-        log("role   mascot.jpg (first still)")
+    if not any(k.startswith("mascot.") for k in assigned) and first_still is not None:
+        dest = site / ("mascot" + out_ext(first_still))
+        optimize_image(first_still, dest)
+        assigned[dest.name] = "/images/site/%s" % dest.name
+        log("role   %s (first still)" % dest.name)
     if "mascot-mist.mp4" not in assigned and first_video is not None:
         optimize_video(first_video, site / "mascot-mist.mp4")
         assigned["mascot-mist.mp4"] = "/images/site/mascot-mist.mp4"
         log("role   mascot-mist.mp4 (first clip)")
+    poster = assigned.get("mascot.png") or assigned.get("mascot.webp") or assigned.get("mascot.jpg") or "/images/site/mascot.png"
+    if poster.endswith(".png"):
+        stale = site / "mascot.jpg"
+        if stale.exists():
+            stale.unlink()
+            log("removed flattened mascot.jpg")
     theme = {
-        "poster": assigned.get("mascot.jpg", "/images/site/mascot.jpg"),
+        "poster": poster,
         "heroVideo": assigned.get("mascot-mist.mp4", "/images/site/mascot-mist.mp4"),
         "rootsVideo": assigned.get("mascot-roots.mp4"),
         "fireVideo": assigned.get("mascot-fire.mp4"),
-        "about": assigned.get("about.jpg"),
-        "og": assigned.get("og.jpg"),
+        "about": assigned.get("about.png") or assigned.get("about.jpg"),
+        "og": assigned.get("og.png") or assigned.get("og.jpg"),
         "stills": stills,
         "clips": clips,
         "origin": ORIGIN,
