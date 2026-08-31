@@ -4,20 +4,20 @@
   var isHome = path === "/";
   var isBlogIndex = path === "/blog" || path === "/blog/";
   var isBlogPost = path.indexOf("/blog/") === 0 && !isBlogIndex;
-  var useAtmosphere = isHome || isBlogIndex;
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
 
-  $all(".mascot-band, [data-mascot-reel]").forEach(function (el) { el.remove(); });
+  $all(".mascot-band, [data-mascot-reel], [data-theme-atmosphere]").forEach(function (el) { el.remove(); });
+  if (!isHome) {
+    $all(".hero-photo").forEach(function (el) { el.remove(); });
+  }
 
   if (isBlogPost) {
     document.documentElement.classList.add("is-blog-post");
-    $all(".hero-photo, [data-theme-atmosphere]").forEach(function (el) { el.remove(); });
-    $all('img[src*="/images/site/mascot"]').forEach(function (el) {
-      if (!el.closest(".site-header, .wordmark")) el.remove();
+    $all('img.blog-title-mascot, img[src*="/images/site/mascot"]').forEach(function (el) {
+      if (!el.closest(".site-header, .wordmark, .post-body, .blog-body, article .content")) el.remove();
     });
-    return;
   }
 
   function hideVideo(video) {
@@ -30,23 +30,9 @@
     video.style.display = "none";
   }
 
-  function ensureAtmosphere() {
-    if (isHome) return;
-    if ($(".hero-photo") || $("[data-theme-atmosphere]")) return;
-    var wrap = document.createElement("div");
-    wrap.className = "theme-atmosphere";
-    wrap.setAttribute("data-theme-atmosphere", "");
-    wrap.setAttribute("aria-hidden", "true");
-    wrap.innerHTML = '<video muted loop playsinline data-hero-video></video><img alt="">';
-    var main = $("main");
-    if (main) main.insertBefore(wrap, main.firstChild);
-    else document.body.insertBefore(wrap, document.body.firstChild);
-  }
-
-  function applyAtmosphere(theme) {
-    if (!useAtmosphere) return;
-    ensureAtmosphere();
-    var root = $(".hero-photo") || $("[data-theme-atmosphere]");
+  function applyHomeHero(theme) {
+    if (!isHome) return;
+    var root = $(".hero-photo");
     if (!root) return;
     var video = root.querySelector("[data-hero-video], video");
     var img = root.querySelector("img");
@@ -59,8 +45,6 @@
       hideVideo(video);
       return;
     }
-    video.style.display = "";
-    video.classList.remove("is-ready");
     video.addEventListener("loadeddata", function () { video.classList.add("is-ready"); }, { once: true });
     video.addEventListener("error", function () { hideVideo(video); }, { once: true });
     var source = video.querySelector("source");
@@ -74,6 +58,28 @@
     }
   }
 
+  function applyBlogTitleMascot(theme) {
+    if (!isBlogIndex || !theme.poster) return;
+    if ($(".blog-title-mascot")) {
+      $(".blog-title-mascot").src = theme.poster;
+      return;
+    }
+    var h1 = $("main h1") || $("h1");
+    if (!h1) return;
+    var wrap = h1.closest(".title-with-mascot");
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "title-with-mascot";
+      h1.parentNode.insertBefore(wrap, h1);
+      wrap.appendChild(h1);
+    }
+    var img = document.createElement("img");
+    img.className = "blog-title-mascot";
+    img.src = theme.poster;
+    img.alt = "";
+    wrap.appendChild(img);
+  }
+
   function applyAbout(theme) {
     if (!theme.about) return;
     if (path.indexOf("/about") !== 0) return;
@@ -84,6 +90,10 @@
 
   fetch(MANIFEST, { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function (theme) { applyAtmosphere(theme); applyAbout(theme); })
+    .then(function (theme) {
+      applyHomeHero(theme);
+      applyBlogTitleMascot(theme);
+      applyAbout(theme);
+    })
     .catch(function () {});
 })();
