@@ -1,22 +1,14 @@
 /* Additive forest / mascot atmosphere. Loaded after site.css. */
 
-.hero-photo,
-.theme-atmosphere {
+.hero-photo {
   position: relative;
   overflow: hidden;
   background: #140c0e;
-}
-
-.hero-photo { min-height: 22rem; }
-.theme-atmosphere {
-  min-height: 14rem;
-  margin: 0 0 2rem;
+  min-height: 22rem;
 }
 
 .hero-photo img,
-.hero-photo video,
-.theme-atmosphere img,
-.theme-atmosphere video {
+.hero-photo video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -27,20 +19,15 @@
   background: transparent;
 }
 
-.hero-photo img,
-.theme-atmosphere img { z-index: 1; }
-
-.hero-photo video,
-.theme-atmosphere video {
+.hero-photo img { z-index: 1; }
+.hero-photo video {
   z-index: 2;
   opacity: 0;
   pointer-events: none;
 }
-.hero-photo video.is-ready,
-.theme-atmosphere video.is-ready { opacity: 1; }
+.hero-photo video.is-ready { opacity: 1; }
 
-.hero-photo::after,
-.theme-atmosphere::after {
+.hero-photo::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -53,7 +40,6 @@
 
 @media (max-width: 720px) {
   .hero-photo { min-height: 26rem; }
-  .theme-atmosphere { min-height: 12rem; }
 }
 
 .hero-copy {
@@ -64,7 +50,27 @@
 }
 
 .mascot-band,
-[data-mascot-reel] { display: none !important; }
+[data-mascot-reel],
+[data-theme-atmosphere],
+.theme-atmosphere { display: none !important; }
+
+.title-with-mascot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.title-with-mascot h1 { margin: 0; }
+.blog-title-mascot {
+  display: block;
+  height: 6.5rem;
+  width: auto;
+  max-width: 8rem;
+  object-fit: contain;
+  background: transparent !important;
+  flex: 0 0 auto;
+}
 
 img[src$=".png"],
 img[src$=".PNG"],
@@ -74,9 +80,20 @@ img[src$=".webp"] {
 }
 
 html.is-blog-post .hero-photo,
-html.is-blog-post .theme-atmosphere,
-html.is-blog-post img[src*="/images/site/mascot"] {
+html.is-blog-post .blog-title-mascot,
+html.is-blog-post [data-theme-atmosphere] {
   display: none !important;
+}
+
+.blog-list img,
+.post-card img,
+article img,
+.post-body img,
+.blog-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: transparent;
 }
 
 .release-grid {
@@ -96,5 +113,5 @@ html.is-blog-post img[src*="/images/site/mascot"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-photo video, .theme-atmosphere video { display: none; }
+  .hero-photo video { display: none; }
 }
