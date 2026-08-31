@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Copy Nextcloud Website/theme media into the public site.
-
-PNG/WebP/GIF keep their alpha. JPEG stills stay JPEG.
+PNG/WebP/GIF are copied as-is so alpha is preserved.
 """
 from __future__ import annotations
 import json, os, re, shutil, subprocess, sys, time
@@ -99,16 +98,16 @@ def iter_media(folder):
 def optimize_image(src, dst, max_w=1800):
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst = dst.with_suffix(out_ext(src))
+    if keep_alpha(src):
+        if (not dst.exists()) or newer(src, dst):
+            shutil.copy2(src, dst)
+            os.chmod(dst, 0o644)
+            log("png    %s -> %s (alpha preserved)" % (src.name, dst))
+            return True
+        return False
     if not newer(src, dst) and dst.exists():
         return False
     ffmpeg = which("ffmpeg")
-    if keep_alpha(src):
-        if ffmpeg and run([ffmpeg, "-y", "-i", str(src), "-vf", "scale='min(%d,iw)':-2" % max_w, "-pix_fmt", "rgba", str(dst)]):
-            os.chmod(dst, 0o644)
-            return True
-        shutil.copy2(src, dst)
-        os.chmod(dst, 0o644)
-        return True
     if ffmpeg and run([ffmpeg, "-y", "-i", str(src), "-vf", "scale='min(%d,iw)':-2" % max_w, "-q:v", "3", "-update", "1", "-frames:v", "1", str(dst)]):
         os.chmod(dst, 0o644)
         return True
@@ -144,9 +143,8 @@ def ensure_link(html, tag):
         return html.replace("</body>", "%s\n</body>" % tag, 1)
     return html
 
-def patch_index(index_path, theme):
+def patch_html(index_path, theme):
     if not index_path.is_file():
-        log("no index.html at %s — skip homepage patch" % index_path)
         return
     html = index_path.read_text(encoding="utf-8")
     original = html
@@ -155,28 +153,34 @@ def patch_index(index_path, theme):
     poster = theme.get("poster") or ""
     if poster:
         html = html.replace("/images/site/mascot.jpg", poster)
-        html = html.replace("/images/site/mascot.png", poster)
-    if "<!-- theme:mascot-start -->" not in html:
-        if "<!-- rm:recent-start -->" in html:
-            html = html.replace("<!-- rm:recent-start -->", GALLERY_HTML + "\n<!-- rm:recent-start -->", 1)
-        elif '<section class="wrap section">' in html:
-            html = html.replace('<section class="wrap section">', GALLERY_HTML + '\n<section class="wrap section">', 1)
+    if index_path.resolve() == (ROOT / "index.html").resolve():
+        if "<!-- theme:mascot-start -->" not in html:
+            if "<!-- rm:recent-start -->" in html:
+                html = html.replace("<!-- rm:recent-start -->", GALLERY_HTML + "\n<!-- rm:recent-start -->", 1)
+            elif '<section class="wrap section">' in html:
+                html = html.replace('<section class="wrap section">', GALLERY_HTML + '\n<section class="wrap section">', 1)
     if html == original:
-        log("homepage already current")
         return
-    tmp = index_path.with_name("index.html.tmp")
+    tmp = index_path.with_name(index_path.name + ".tmp")
     try:
         tmp.write_text(html, encoding="utf-8")
         os.chmod(tmp, 0o644)
         os.replace(tmp, index_path)
     except OSError:
-        try:
-            index_path.unlink()
-        except OSError:
-            pass
         index_path.write_text(html, encoding="utf-8")
         os.chmod(index_path, 0o644)
     log("patched %s" % index_path)
+
+def patch_all_html(theme):
+    skip = {"albums", "audio", "images"}
+    for path in ROOT.rglob("index.html"):
+        parts = set(path.relative_to(ROOT).parts)
+        if parts & skip:
+            continue
+        try:
+            patch_html(path, theme)
+        except OSError as exc:
+            log("skip patch %s: %s" % (path, exc))
 
 def main():
     debounce = float(os.environ.get("THEME_DEBOUNCE_SEC", os.environ.get("BLOG_DEBOUNCE_SEC", "0")) or 0)
@@ -211,7 +215,6 @@ def main():
             gdest = gallery / (name + out_ext(src))
             if optimize_image(src, gdest):
                 copied += 1
-                log("still  %s -> /images/site/mascot/%s" % (src.name, gdest.name))
             stills.append({"src": "/images/site/mascot/%s" % gdest.name, "name": stem})
             reserved = role_still(stem, src)
             if reserved and reserved not in assigned:
@@ -225,7 +228,6 @@ def main():
             gdest = gallery / (name + ".mp4")
             if optimize_video(src, gdest):
                 copied += 1
-                log("clip   %s -> /images/site/mascot/%s" % (src.name, gdest.name))
             clips.append({"src": "/images/site/mascot/%s" % gdest.name, "name": stem})
             reserved = role_video(stem)
             if reserved and reserved not in assigned:
@@ -238,19 +240,15 @@ def main():
         optimize_image(first_still, dest)
         assigned[dest.name] = "/images/site/%s" % dest.name
         log("role   %s (first still)" % dest.name)
-    if "mascot-mist.mp4" not in assigned and first_video is not None:
-        optimize_video(first_video, site / "mascot-mist.mp4")
-        assigned["mascot-mist.mp4"] = "/images/site/mascot-mist.mp4"
-        log("role   mascot-mist.mp4 (first clip)")
-    poster = assigned.get("mascot.png") or assigned.get("mascot.webp") or assigned.get("mascot.jpg") or "/images/site/mascot.png"
-    if poster.endswith(".png"):
+    poster = assigned.get("mascot.png") or assigned.get("mascot.webp") or assigned.get("mascot.jpg")
+    if poster and poster.endswith(".png"):
         stale = site / "mascot.jpg"
         if stale.exists():
             stale.unlink()
             log("removed flattened mascot.jpg")
     theme = {
-        "poster": poster,
-        "heroVideo": assigned.get("mascot-mist.mp4", "/images/site/mascot-mist.mp4"),
+        "poster": poster or "/images/site/mascot.png",
+        "heroVideo": assigned.get("mascot-mist.mp4"),
         "rootsVideo": assigned.get("mascot-roots.mp4"),
         "fireVideo": assigned.get("mascot-fire.mp4"),
         "about": assigned.get("about.png") or assigned.get("about.jpg"),
@@ -263,7 +261,7 @@ def main():
     restorecon = which("restorecon")
     if restorecon:
         subprocess.run([restorecon, "-R", str(site)], check=False, capture_output=True)
-    patch_index(ROOT / "index.html", theme)
+    patch_all_html(theme)
     log("wrote theme.json, %d stills, %d clips, %d files processed" % (len(stills), len(clips), copied))
     return 0
 
