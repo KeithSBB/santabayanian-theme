@@ -1,20 +1,48 @@
 (function () {
   var MANIFEST = "/images/site/theme.json";
   function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+  function hideVideo(video) {
+    if (!video) return;
+    video.classList.remove("is-ready");
+    video.removeAttribute("src");
+    var source = video.querySelector("source");
+    if (source) source.removeAttribute("src");
+    try { video.load(); } catch (e) {}
+    video.style.display = "none";
+  }
+
   function applyHero(theme) {
     var video = $("[data-hero-video]") || $(".hero-photo video");
     var img = $(".hero-photo img");
-    if (img && theme.poster) img.src = theme.poster;
-    if (video && theme.heroVideo) {
-      var source = video.querySelector("source");
-      if (source) source.src = theme.heroVideo;
-      else video.src = theme.heroVideo;
-      video.setAttribute("poster", theme.poster || "");
-      try { video.load(); } catch (e) {}
-      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!reduce) { var play = video.play(); if (play && play.catch) play.catch(function () {}); }
+    if (img && theme.poster) {
+      img.src = theme.poster;
+      img.alt = "Santa Bayanian";
+    }
+    $all("[data-mascot-img]").forEach(function (el) {
+      if (theme.poster) el.src = theme.poster;
+    });
+    if (!video) return;
+    if (!theme.heroVideo) {
+      hideVideo(video);
+      return;
+    }
+    video.style.display = "";
+    video.classList.remove("is-ready");
+    video.addEventListener("loadeddata", function () { video.classList.add("is-ready"); }, { once: true });
+    video.addEventListener("error", function () { hideVideo(video); }, { once: true });
+    var source = video.querySelector("source");
+    if (source) source.src = theme.heroVideo;
+    else video.src = theme.heroVideo;
+    try { video.load(); } catch (e) {}
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) {
+      var play = video.play();
+      if (play && play.catch) play.catch(function () { hideVideo(video); });
     }
   }
+
   function card(item, isVideo) {
     var fig = document.createElement("figure");
     fig.className = "mascot-card";
@@ -27,7 +55,8 @@
       fig.appendChild(v);
     } else {
       var i = document.createElement("img");
-      i.src = item.src; i.alt = item.name || "Santa Bayanian";
+      i.src = item.src;
+      i.alt = item.name || "Santa Bayanian";
       fig.appendChild(i);
     }
     if (item.name) {
@@ -37,26 +66,26 @@
     }
     return fig;
   }
+
   function applyReel(theme) {
     var grid = $("[data-mascot-grid]");
     if (!grid) return;
     grid.innerHTML = "";
     (theme.clips || []).forEach(function (c) { grid.appendChild(card(c, true)); });
-    (theme.stills || []).forEach(function (s) {
-      if ((theme.clips || []).length && s.src.indexOf("mascot.jpg") !== -1) return;
-      grid.appendChild(card(s, false));
-    });
+    (theme.stills || []).forEach(function (s) { grid.appendChild(card(s, false)); });
     if (!grid.childNodes.length) {
       var band = $("[data-mascot-reel]");
       if (band) band.hidden = true;
     }
   }
+
   function applyAbout(theme) {
     if (!theme.about) return;
-    document.querySelectorAll("[data-about-photo], .about-photo img").forEach(function (el) {
+    $all("[data-about-photo], .about-photo img").forEach(function (el) {
       if (el.tagName === "IMG") el.src = theme.about;
     });
   }
+
   fetch(MANIFEST, { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (theme) { applyHero(theme); applyReel(theme); applyAbout(theme); })
