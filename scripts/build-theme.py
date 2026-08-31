@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("BLOG_WEBROOT", os.environ.get("THEME_WEBROOT", "/var/www/santabayanian")))
 NC_DEFAULT = Path("/mnt/data/ncdata/musicuser/files/Website/theme")
+BLOG_NC = Path(os.environ.get("BLOG_DIR", "/mnt/data/ncdata/musicuser/files/Website/blog"))
 ORIGIN = os.environ.get("BLOG_ORIGIN", "https://santabayanian.com")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".gif"}
 ALPHA_EXT = {".png", ".webp", ".gif"}
@@ -15,6 +16,7 @@ RESERVED_STILL = {"mascot": "mascot", "hero": "mascot", "poster": "mascot", "r5"
 RESERVED_VIDEO = {"mascot-mist": "mascot-mist.mp4", "mist": "mascot-mist.mp4", "hero": "mascot-mist.mp4", "mascot-roots": "mascot-roots.mp4", "roots": "mascot-roots.mp4", "mascot-fire": "mascot-fire.mp4", "fire": "mascot-fire.mp4", "demon": "mascot-fire.mp4"}
 RECENT_START = "<!-- rm:recent-start -->"
 RECENT_END = "<!-- rm:recent-end -->"
+IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=["\'])([^"\']+)(["\'])', re.I)
 
 def log(msg):
     print(msg, flush=True)
@@ -145,6 +147,18 @@ def ensure_link(html, tag):
 def strip_player_copy(html):
     html = re.sub(r"<!-- theme:mascot-start -->[\s\S]*?<!-- theme:mascot-end -->\s*", "", html)
     html = re.sub(r"<section[^>]*mascot-band[^>]*>[\s\S]*?</section>\s*", "", html, flags=re.I)
+    html = re.sub(
+        r"<(section|article|div)(\s[^>]*)?>[\s\S]{0,3000}?<p class=\"kicker\">\s*The player\s*</p>[\s\S]*?</\1>\s*",
+        "",
+        html,
+        flags=re.I,
+    )
+    html = re.sub(
+        r"<(section|article|div)(\s[^>]*)?>[\s\S]{0,4000}?(?:A mascot from the same woods|same woods as the music|The story)[\s\S]*?</\1>\s*",
+        "",
+        html,
+        flags=re.I,
+    )
     html = html.replace("The player in the trees is the face of the work. ", "")
     html = html.replace("The player in the trees is the face of the work.", "")
     return html
@@ -200,8 +214,7 @@ def sync_home_recent():
     items = published_releases()
     log("published albums: %s" % (", ".join(i["slug"] for i in items) or "(none)"))
     block = recent_block(items)
-    html = home.read_text(encoding="utf-8")
-    html = strip_player_copy(html)
+    html = strip_player_copy(home.read_text(encoding="utf-8"))
     if RECENT_START in html and RECENT_END in html:
         html = re.sub(re.escape(RECENT_START) + r"[\s\S]*?" + re.escape(RECENT_END), block, html, count=1)
     else:
@@ -224,7 +237,101 @@ def sync_home_recent():
     tmp.write_text(html, encoding="utf-8")
     os.chmod(tmp, 0o644)
     os.replace(tmp, home)
-    log("synced home recent releases; stripped The Player section")
+    log("synced home recent releases; stripped The Player copy")
+
+def index_nc_blog_images():
+    by_name, by_rel = {}, {}
+    if not BLOG_NC.is_dir():
+        log("blog nc dir missing: %s" % BLOG_NC)
+        return by_name, by_rel
+    for dirpath, dirnames, filenames in os.walk(BLOG_NC):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") or d.startswith(".attachments")]
+        for name in filenames:
+            if name.startswith(".") or name.endswith(".part") or name.endswith(".md"):
+                continue
+            path = Path(dirpath) / name
+            if path.suffix.lower() not in IMAGE_EXT:
+                continue
+            by_name[name.lower()] = path
+            try:
+                rel = path.relative_to(BLOG_NC).as_posix().lower()
+            except ValueError:
+                rel = name.lower()
+            by_rel[rel] = path
+            by_rel[name.lower()] = path
+            if ".attachments" in rel:
+                by_rel["." + rel.split(".", 1)[-1] if False else rel] = path
+                by_rel[rel.split("/")[-1]] = path
+    return by_name, by_rel
+
+def public_image_name(src):
+    stem = slugify(src.stem)
+    ext = src.suffix.lower()
+    if ext == ".jpeg":
+        ext = ".jpg"
+    if src.suffix.lower() in ALPHA_EXT:
+        ext = src.suffix.lower()
+    return stem + ext
+
+def copy_blog_image(src, dest_dir):
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    name = public_image_name(src)
+    dst = dest_dir / name
+    if keep_alpha(src):
+        if newer(src, dst) or not dst.exists():
+            shutil.copy2(src, dst)
+            os.chmod(dst, 0o644)
+    else:
+        if newer(src, dst) or not dst.exists():
+            shutil.copy2(src, dst)
+            os.chmod(dst, 0o644)
+    return "/images/blog/" + name
+
+def rewrite_blog_html(html, by_name, by_rel, dest_dir):
+    def repl(match):
+        src = match.group(2).strip()
+        if src.startswith("data:") or src.startswith("http://") or src.startswith("https://"):
+            return match.group(0)
+        raw = src.split("?", 1)[0].lstrip("./")
+        key = raw.lower()
+        name = Path(raw).name.lower()
+        found = by_rel.get(key) or by_name.get(name)
+        if found is None and "attachments" in key:
+            found = by_name.get(name)
+        if found is None and src.startswith("/images/blog/"):
+            disk = ROOT / src.lstrip("/")
+            if disk.exists():
+                return match.group(0)
+            found = by_name.get(Path(src).name.lower())
+        if found is None:
+            log("blog img missing: %s" % src)
+            return match.group(0)
+        url = copy_blog_image(found, dest_dir)
+        log("blog img %s -> %s" % (src, url))
+        return match.group(1) + url + match.group(3)
+    return IMG_SRC_RE.sub(repl, html)
+
+def fix_blog_media():
+    dest = ROOT / "images" / "blog"
+    dest.mkdir(parents=True, exist_ok=True)
+    by_name, by_rel = index_nc_blog_images()
+    log("blog nc images: %d" % len(by_name))
+    for src in by_name.values():
+        copy_blog_image(src, dest)
+    blog_root = ROOT / "blog"
+    if not blog_root.is_dir():
+        return
+    for page in [blog_root / "index.html"] + list(blog_root.glob("*/index.html")):
+        if not page.is_file():
+            continue
+        html = page.read_text(encoding="utf-8")
+        new = rewrite_blog_html(html, by_name, by_rel, dest)
+        if new != html:
+            tmp = page.with_name(page.name + ".tmp")
+            tmp.write_text(new, encoding="utf-8")
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, page)
+            log("rewrote images in %s" % page)
 
 def patch_html(index_path, theme):
     if not index_path.is_file():
@@ -238,10 +345,11 @@ def patch_html(index_path, theme):
     original = html
     html = ensure_link(html, '<link rel="stylesheet" href="/css/theme.css">')
     html = ensure_link(html, '<script src="/js/theme.js" defer></script>')
-    html = strip_player_copy(html)
-    poster = theme.get("poster") or ""
-    if poster and is_home:
-        html = html.replace("/images/site/mascot.jpg", poster)
+    if is_home:
+        html = strip_player_copy(html)
+        poster = theme.get("poster") or ""
+        if poster:
+            html = html.replace("/images/site/mascot.jpg", poster)
     if html == original:
         return
     tmp = index_path.with_name(index_path.name + ".tmp")
@@ -344,11 +452,16 @@ def main():
     restorecon = which("restorecon")
     if restorecon:
         subprocess.run([restorecon, "-R", str(site)], check=False, capture_output=True)
+        subprocess.run([restorecon, "-R", str(ROOT / "images" / "blog")], check=False, capture_output=True)
     patch_all_html(theme)
     try:
         sync_home_recent()
     except OSError as exc:
         log("home recent sync skipped: %s" % exc)
+    try:
+        fix_blog_media()
+    except OSError as exc:
+        log("blog media fix skipped: %s" % exc)
     log("wrote theme.json, %d stills, %d clips, %d files processed" % (len(stills), len(clips), copied))
     return 0
 
