@@ -11,11 +11,10 @@ IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".heic", ".gif"}
 ALPHA_EXT = {".png", ".webp", ".gif"}
 VIDEO_EXT = {".mp4", ".mov", ".webm", ".m4v"}
 SKIP_DIRS = {"masters", "master", "raw", "drafts", "export"}
-RESERVED_STILL = {"mascot": "mascot", "hero": "mascot", "poster": "mascot", "r5": "mascot", "about": "about", "about-photo": "about", "og": "og"}
+RESERVED_STILL = {"mascot": "mascot", "hero": "mascot", "poster": "mascot", "r5": "mascot", "keith": "about", "about": "about", "about-photo": "about", "og": "og"}
 RESERVED_VIDEO = {"mascot-mist": "mascot-mist.mp4", "mist": "mascot-mist.mp4", "hero": "mascot-mist.mp4", "mascot-roots": "mascot-roots.mp4", "roots": "mascot-roots.mp4", "mascot-fire": "mascot-fire.mp4", "fire": "mascot-fire.mp4", "demon": "mascot-fire.mp4"}
 RECENT_START = "<!-- rm:recent-start -->"
 RECENT_END = "<!-- rm:recent-end -->"
-GALLERY_HTML = "<!-- theme:mascot-start -->\n<section class=\"wrap section mascot-band\" data-mascot-reel>\n  <div class=\"section-head\"><div><p class=\"kicker\">The player</p><h2>Santa Bayanian</h2></div></div>\n  <div class=\"mascot-reel\" data-mascot-grid></div>\n</section>\n<!-- theme:mascot-end -->\n"
 
 def log(msg):
     print(msg, flush=True)
@@ -75,7 +74,7 @@ def role_still(stem, src):
     s = slugify(stem)
     base = RESERVED_STILL.get(s)
     if not base:
-        if "about" in s:
+        if "about" in s or s in {"keith", "portrait"}:
             base = "about"
         elif s in {"og", "opengraph", "share"}:
             base = "og"
@@ -143,6 +142,13 @@ def ensure_link(html, tag):
         return html.replace("</body>", "%s\n</body>" % tag, 1)
     return html
 
+def strip_player_copy(html):
+    html = re.sub(r"<!-- theme:mascot-start -->[\s\S]*?<!-- theme:mascot-end -->\s*", "", html)
+    html = re.sub(r"<section[^>]*mascot-band[^>]*>[\s\S]*?</section>\s*", "", html, flags=re.I)
+    html = html.replace("The player in the trees is the face of the work. ", "")
+    html = html.replace("The player in the trees is the face of the work.", "")
+    return html
+
 def album_title(html, slug):
     m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
     if m:
@@ -195,6 +201,7 @@ def sync_home_recent():
     log("published albums: %s" % (", ".join(i["slug"] for i in items) or "(none)"))
     block = recent_block(items)
     html = home.read_text(encoding="utf-8")
+    html = strip_player_copy(html)
     if RECENT_START in html and RECENT_END in html:
         html = re.sub(re.escape(RECENT_START) + r"[\s\S]*?" + re.escape(RECENT_END), block, html, count=1)
     else:
@@ -211,16 +218,13 @@ def sync_home_recent():
             count=1,
             flags=re.I,
         )
-        if 'id="recent-releases"' not in html:
-            if "<!-- theme:mascot-end -->" in html:
-                html = html.replace("<!-- theme:mascot-end -->", "<!-- theme:mascot-end -->\n" + section, 1)
-            elif "</main>" in html:
-                html = html.replace("</main>", section + "</main>", 1)
+        if 'id="recent-releases"' not in html and "</main>" in html:
+            html = html.replace("</main>", section + "</main>", 1)
     tmp = home.with_name("index.html.tmp")
     tmp.write_text(html, encoding="utf-8")
     os.chmod(tmp, 0o644)
     os.replace(tmp, home)
-    log("synced home recent releases")
+    log("synced home recent releases; stripped The Player section")
 
 def patch_html(index_path, theme):
     if not index_path.is_file():
@@ -234,14 +238,10 @@ def patch_html(index_path, theme):
     original = html
     html = ensure_link(html, '<link rel="stylesheet" href="/css/theme.css">')
     html = ensure_link(html, '<script src="/js/theme.js" defer></script>')
+    html = strip_player_copy(html)
     poster = theme.get("poster") or ""
     if poster and is_home:
         html = html.replace("/images/site/mascot.jpg", poster)
-    if is_home and "<!-- theme:mascot-start -->" not in html:
-        if RECENT_START in html:
-            html = html.replace(RECENT_START, GALLERY_HTML + "\n" + RECENT_START, 1)
-        elif '<section class="wrap section">' in html:
-            html = html.replace('<section class="wrap section">', GALLERY_HTML + '\n<section class="wrap section">', 1)
     if html == original:
         return
     tmp = index_path.with_name(index_path.name + ".tmp")
