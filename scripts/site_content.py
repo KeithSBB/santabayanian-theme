@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Homepage journal teaser, blog listing cards, videos from Nextcloud."""
 from __future__ import annotations
-import os, re, shutil
+import os, re, sys
 from html import escape
 from pathlib import Path
 
@@ -37,17 +37,11 @@ def _abs_img(src, slug, root):
     if src.startswith("http://") or src.startswith("https://") or src.startswith("/"):
         if src.startswith("/") and not (root / src.lstrip("/")).exists():
             name = Path(src).name
-            for cand in (
-                root / "images" / "blog" / name,
-                root / "blog" / slug / name,
-            ):
+            for cand in (root / "images" / "blog" / name, root / "blog" / slug / name):
                 if cand.exists():
                     return "/" + cand.relative_to(root).as_posix()
         return src
-    for cand in (
-        root / "images" / "blog" / Path(src).name,
-        root / "blog" / slug / Path(src).name,
-    ):
+    for cand in (root / "images" / "blog" / Path(src).name, root / "blog" / slug / Path(src).name):
         if cand.exists():
             return "/" + cand.relative_to(root).as_posix()
     return "/blog/%s/%s" % (slug, src.lstrip("./"))
@@ -81,6 +75,7 @@ def fix_blog_index_cards(root, log):
         return
     posts = {p["slug"]: p for p in iter_posts(root)}
     html = index.read_text(encoding="utf-8")
+    original = html
 
     def fix_article(match):
         block = match.group(0)
@@ -110,13 +105,25 @@ def fix_blog_index_cards(root, log):
             )
         return block
 
-    new = re.sub(r"<article\b[\s\S]*?</article>", fix_article, html, flags=re.I)
-    if new != html:
+    html = re.sub(r"<article\b[\s\S]*?</article>", fix_article, html, flags=re.I)
+    for slug, post in posts.items():
+        if not post["img"]:
+            continue
+        html = re.sub(
+            r'(href=["\']/blog/%s/?["\'][\s\S]{0,800}<img\b[^>]*\bsrc=["\'])([^"\']+)' % re.escape(slug),
+            r"\1" + post["img"],
+            html,
+            count=1,
+            flags=re.I,
+        )
+    if html != original:
         tmp = index.with_name("index.html.tmp")
-        tmp.write_text(new, encoding="utf-8")
+        tmp.write_text(html, encoding="utf-8")
         os.chmod(tmp, 0o644)
         os.replace(tmp, index)
         log("fixed blog listing card images")
+    else:
+        log("blog listing cards unchanged (no article/img match)")
 
 def sync_home_journal(root, log):
     home = root / "index.html"
@@ -137,8 +144,7 @@ def sync_home_journal(root, log):
         '      <h3>%s</h3>\n'
         '    </a>\n'
         '  </article>\n'
-        '</section>\n'
-        % (p["href"], img, escape(p["title"]))
+        '</section>\n' % (p["href"], img, escape(p["title"]))
         + JOURNAL_END
     )
     html = home.read_text(encoding="utf-8")
@@ -188,23 +194,21 @@ def load_videos():
         meta, body = parse_md(path)
         if str(meta.get("draft", "")).lower() in {"1", "true", "yes"}:
             continue
-        yid = youtube_id(meta.get("youtube") or meta.get("url") or meta.get("id") or body.splitlines()[0] if body else "")
+        first = body.splitlines()[0] if body else ""
+        yid = youtube_id(meta.get("youtube") or meta.get("url") or meta.get("id") or first)
         if not yid:
             continue
         title = meta.get("title") or path.stem.replace("-", " ").title()
-        items.append({
-            "id": yid,
-            "title": title,
-            "body": body if not youtube_id(body.splitlines()[0]) else "\n".join(body.splitlines()[1:]).strip(),
-            "date": meta.get("date") or "",
-            "mtime": path.stat().st_mtime,
-        })
+        rest = body
+        if body and youtube_id(first):
+            rest = "\n".join(body.splitlines()[1:]).strip()
+        items.append({"id": yid, "title": title, "body": rest, "date": meta.get("date") or "", "mtime": path.stat().st_mtime})
     items.sort(key=lambda v: (v["date"], v["mtime"]), reverse=True)
     return items
 
 def videos_inner(items):
     if not items:
-        body = '<p class="lede">Videos will appear here when you add them to Nextcloud <code>Website/videos</code>.</p>\n'
+        body = '<p class="lede">Add a markdown file to Nextcloud <code>Website/videos</code> with a YouTube URL.</p>\n'
     else:
         cards = []
         for it in items:
@@ -229,26 +233,19 @@ def chrome_from(root):
 
 def sync_videos(root, log):
     items = load_videos()
-    log("videos: %d" % len(items))
+    log("videos: %d from %s" % (len(items), VIDEOS_NC))
     dest = root / "videos" / "index.html"
     dest.parent.mkdir(parents=True, exist_ok=True)
     inner = videos_inner(items)
-    if dest.is_file():
-        html = dest.read_text(encoding="utf-8")
-    else:
-        html = chrome_from(root)
-        html = html.replace("<title>", "<title>Videos — ", 1) if "<title>" in html else html
-        if "</main>" not in html:
-            html = (
-                "<!DOCTYPE html><html lang=\"en\"><head><meta charset=utf-8>"
-                "<meta name=viewport content=\"width=device-width, initial-scale=1\">"
-                "<title>Videos</title>"
-                "<link rel=stylesheet href=\"/css/site.css\">"
-                "<link rel=stylesheet href=\"/css/theme.css\"></head><body>"
-                "<main id=content></main></body></html>"
-            )
-    if "<main" in html and "</main>" not in html:
-        pass
+    html = dest.read_text(encoding="utf-8") if dest.is_file() else chrome_from(root)
+    if not html:
+        html = (
+            "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>Videos</title><link rel=\"stylesheet\" href=\"/css/site.css\">"
+            "<link rel=\"stylesheet\" href=\"/css/theme.css\"></head>"
+            "<body><main id=\"content\"></main></body></html>"
+        )
     if VIDEOS_START in html and VIDEOS_END in html:
         html = re.sub(re.escape(VIDEOS_START) + r"[\s\S]*?" + re.escape(VIDEOS_END), inner, html, count=1)
     elif "</main>" in html:
@@ -266,3 +263,10 @@ def run(root, blog_nc, log):
     fix_blog_index_cards(root, log)
     sync_home_journal(root, log)
     sync_videos(root, log)
+
+if __name__ == "__main__":
+    root = Path(os.environ.get("BLOG_WEBROOT", os.environ.get("THEME_WEBROOT", "/var/www/santabayanian")))
+    def log(msg):
+        print(msg, flush=True)
+    run(root, Path(os.environ.get("BLOG_DIR", "/mnt/data/ncdata/musicuser/files/Website/blog")), log)
+    sys.exit(0)
