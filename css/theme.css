@@ -1,14 +1,22 @@
-/* Additive mascot / forest theme. Loaded after site.css. */
+/* Additive forest / mascot atmosphere. Loaded after site.css. */
 
-.hero-photo {
+.hero-photo,
+.theme-atmosphere {
   position: relative;
   overflow: hidden;
   background: #140c0e;
-  min-height: 22rem;
+}
+
+.hero-photo { min-height: 22rem; }
+.theme-atmosphere {
+  min-height: 14rem;
+  margin: 0 0 2rem;
 }
 
 .hero-photo img,
-.hero-photo video {
+.hero-photo video,
+.theme-atmosphere img,
+.theme-atmosphere video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -19,30 +27,33 @@
   background: transparent;
 }
 
-.hero-photo img { z-index: 1; }
-.hero-photo video {
+.hero-photo img,
+.theme-atmosphere img { z-index: 1; }
+
+.hero-photo video,
+.theme-atmosphere video {
   z-index: 2;
   opacity: 0;
   pointer-events: none;
 }
-.hero-photo video.is-ready { opacity: 1; }
+.hero-photo video.is-ready,
+.theme-atmosphere video.is-ready { opacity: 1; }
 
-.hero-photo::after {
+.hero-photo::after,
+.theme-atmosphere::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(12, 10, 11, 0.9) 0%, rgba(12, 10, 11, 0.5) 38%, rgba(12, 10, 11, 0.18) 100%),
+    linear-gradient(90deg, rgba(12, 10, 11, 0.88) 0%, rgba(12, 10, 11, 0.45) 42%, rgba(12, 10, 11, 0.16) 100%),
     linear-gradient(0deg, rgba(12, 10, 11, 0.55) 0%, transparent 42%);
 }
 
 @media (max-width: 720px) {
-  .hero-photo { min-height: 28rem; }
-  .hero-photo::after {
-    background: linear-gradient(0deg, rgba(12, 10, 11, 0.92) 8%, rgba(12, 10, 11, 0.4) 55%, rgba(12, 10, 11, 0.22) 100%);
-  }
+  .hero-photo { min-height: 26rem; }
+  .theme-atmosphere { min-height: 12rem; }
 }
 
 .hero-copy {
@@ -52,40 +63,8 @@
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
 }
 
-.mascot-band { padding-block: 3rem; }
-.mascot-reel {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-@media (min-width: 720px) {
-  .mascot-reel { grid-template-columns: repeat(3, 1fr); }
-}
-.mascot-card {
-  position: relative;
-  margin: 0;
-  border-radius: 0.4rem;
-  overflow: hidden;
-  background: transparent;
-  aspect-ratio: 1;
-}
-.mascot-card img,
-.mascot-card video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  background: transparent;
-}
-.mascot-card figcaption {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  padding: 0.65rem 0.8rem;
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  color: #f6efe6;
-  background: linear-gradient(transparent, rgba(12, 10, 11, 0.85));
-}
+.mascot-band,
+[data-mascot-reel] { display: none !important; }
 
 img[src$=".png"],
 img[src$=".PNG"],
@@ -94,9 +73,8 @@ img[src$=".webp"] {
   background-image: none !important;
 }
 
-html.is-blog-post .mascot-band,
 html.is-blog-post .hero-photo,
-html.is-blog-post [data-mascot-reel],
+html.is-blog-post .theme-atmosphere,
 html.is-blog-post img[src*="/images/site/mascot"] {
   display: none !important;
 }
@@ -118,5 +96,5 @@ html.is-blog-post img[src*="/images/site/mascot"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-photo video, .mascot-card video { display: none; }
+  .hero-photo video, .theme-atmosphere video { display: none; }
 }
