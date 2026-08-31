@@ -7,8 +7,9 @@ Type=oneshot
 User=nginx
 Group=nginx
 EnvironmentFile=-/etc/santabayanian/blog-builder.env
-EnvironmentFile=/etc/santabayanian/theme-builder.env
+EnvironmentFile=-/etc/santabayanian/theme-builder.env
 ExecStart=/usr/bin/python3 /var/www/santabayanian/scripts/build-theme.py
+ExecStart=/usr/bin/python3 /var/www/santabayanian/scripts/site_content.py
 Nice=10
 
 [Install]
