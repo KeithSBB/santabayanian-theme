@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch Nextcloud Website/videos for YouTube markdown
+
+[Path]
+PathChanged=/mnt/data/ncdata/musicuser/files/Website/videos
+PathModified=/mnt/data/ncdata/musicuser/files/Website/videos
+Unit=theme-builder.service
+MakeDirectory=false
+
+[Install]
+WantedBy=multi-user.target
