@@ -89,18 +89,32 @@
 
 img[src$=".png"],
 img[src$=".PNG"],
-img[src$=".webp"],
-img[data-mascot-img] {
+img[src$=".webp"] {
   background-color: transparent !important;
   background-image: none !important;
 }
 
-.blog-body img,
-.post-body img,
-article img,
-.prose img {
-  background: transparent;
-  box-shadow: none;
+html.is-blog-post .mascot-band,
+html.is-blog-post .hero-photo,
+html.is-blog-post [data-mascot-reel],
+html.is-blog-post img[src*="/images/site/mascot"] {
+  display: none !important;
+}
+
+.release-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .release-grid { grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+}
+.release-card a { color: inherit; text-decoration: none; }
+.release-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 0.35rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
