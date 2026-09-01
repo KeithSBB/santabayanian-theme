@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact — Santa Bayanian</title>
+  <meta name="description" content="Contact Keith Smith / Santa Bayanian.">
+  <meta name="theme-color" content="#0c0a0b">
+  <link rel="stylesheet" href="/css/site.css">
+  <link rel="stylesheet" href="/css/theme.css">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="site-header">
+  <div class="bar">
+    <a class="wordmark" href="/">Santa Bayanian</a>
+    <nav class="desk-nav" aria-label="Primary">
+      <a href="/">Home</a>
+      <a href="/albums/">Music</a>
+      <a href="/videos/">Videos</a>
+      <a href="/blog/">Blog</a>
+      <a href="/about/">About</a>
+      <a href="/contact/" aria-current="page" class="active">Contact</a>
+    </nav>
+    <button class="icon-btn menu-btn" type="button" aria-label="Open menu">☰</button>
+  </div>
+</header>
+<main id="content">
+  <section class="wrap section">
+    <h1>Contact</h1>
+    <p>Email <a href="mailto:keith@santabayanian.com">keith@santabayanian.com</a>.</p>
+    <form action="mailto:keith@santabayanian.com" method="post" enctype="text/plain">
+      <p>
+        <label for="name">Name</label><br>
+        <input id="name" name="name" type="text" required>
+      </p>
+      <p>
+        <label for="email">Email</label><br>
+        <input id="email" name="email" type="email" required>
+      </p>
+      <p>
+        <label for="message">Message</label><br>
+        <textarea id="message" name="message" rows="6" required></textarea>
+      </p>
+      <p><button class="btn" type="submit">Send</button></p>
+    </form>
+  </section>
+</main>
+<footer class="site-footer">
+  <p class="copy">© <span id="year">2026</span> Keith Smith. All rights reserved.</p>
+</footer>
+<script src="/js/site.js" defer></script>
+<script src="/js/theme.js" defer></script>
+</body>
+</html>
