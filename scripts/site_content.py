@@ -40,7 +40,7 @@ def _abs_img(src, slug, root):
     if not src:
         return None
     if src.startswith("http://") or src.startswith("https://") or src.startswith("/"):
-        if src.startswith("/" ) and not (root / src.lstrip("/")).exists():
+        if src.startswith("/") and not (root / src.lstrip("/")).exists():
             name = Path(src).name
             for cand in (root / "images" / "blog" / name, root / "blog" / slug / name):
                 if cand.exists():
@@ -63,6 +63,20 @@ def strip_stock_copy(html):
         html = html.replace(phrase, "")
     html = re.sub(r'<p class="lede">\s*</p>\s*', "", html)
     html = re.sub(r'<p>\s*</p>\s*', "", html)
+    return html
+
+def strip_home_placeholder_videos(html):
+    """Remove stock film/video cards from the homepage. Keep the mascot hero loop."""
+    patterns = [
+        r'<section\b[^>]*\bid=["\']videos["\'][^>]*>[\s\S]*?</section>\s*',
+        r'<section\b[^>]*class=["\'][^"\']*\bvideos\b[^"\']*["\'][^>]*>[\s\S]*?</section>\s*',
+        r'<section\b[^>]*>[\s\S]{0,2500}?<p class=["\']kicker["\']>\s*(?:On film|Videos|Watch|Film|Performance)\s*</p>[\s\S]*?</section>\s*',
+        r'<section\b[^>]*>[\s\S]{0,8000}?(?:video-grid|video-card|/images/videos/|youtube-nocookie|youtube\.com/embed|youtu\.be)[\s\S]*?</section>\s*',
+        r'<article\b[^>]*class=["\'][^"\']*video-card[^"\']*["\'][^>]*>[\s\S]*?</article>\s*',
+        r'<iframe\b[^>]*(?:youtube|youtu\.be)[^>]*>[\s\S]*?</iframe>\s*',
+    ]
+    for pat in patterns:
+        html = re.sub(pat, "", html, flags=re.I)
     return html
 
 def strip_file(path, log):
@@ -102,8 +116,8 @@ def fix_blog_index_cards(root, log):
     if not index.is_file():
         return
     posts = {p["slug"]: p for p in iter_posts(root)}
-    html = strip_stock_copy(index.read_text(encoding="utf-8"))
     original = index.read_text(encoding="utf-8")
+    html = strip_stock_copy(original)
 
     def fix_article(match):
         block = match.group(0)
@@ -153,8 +167,10 @@ def sync_home_journal(root, log):
     if not home.is_file():
         return
     posts = iter_posts(root)
-    html = strip_stock_copy(home.read_text(encoding="utf-8"))
-    html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
+    html = home.read_text(encoding="utf-8")
+    before = html
+    html = strip_stock_copy(html)
+    html = strip_home_placeholder_videos(html)
     if posts:
         p = posts[0]
         img = ('        <img src="%s" alt="%s">\n' % (p["img"], escape(p["title"]))) if p["img"] else ""
@@ -177,7 +193,9 @@ def sync_home_journal(root, log):
         elif "</main>" in html:
             html = html.replace("</main>", inner + "\n</main>", 1)
         log("homepage journal teaser: %s" % p["slug"])
-    write_html(home, html)
+    if html != before:
+        write_html(home, html)
+        log("stripped leftover homepage videos; kept mascot hero")
 
 def parse_md(path):
     text = path.read_text(encoding="utf-8")
@@ -286,7 +304,6 @@ def sync_videos(root, log):
         )
     html = replace_main(html, main)
     html = strip_stock_copy(html)
-    html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
     if "<title>" in html:
         html = re.sub(r"<title>[^<]*</title>", "<title>Videos \u2014 Santa Bayanian</title>", html, count=1)
     write_html(dest, html)
