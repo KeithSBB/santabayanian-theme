@@ -11,13 +11,14 @@ TIME_RE = re.compile(r'<time[^>]*datetime=["\']([^"\']+)["\']', re.I)
 YT_RE = re.compile(r"(?:youtu\.be/|v=|embed/|shorts/)([A-Za-z0-9_-]{11})")
 JOURNAL_START = "<!-- journal:start -->"
 JOURNAL_END = "<!-- journal:end -->"
+HOME_VIDEO_START = "<!-- home-video:start -->"
+HOME_VIDEO_END = "<!-- home-video:end -->"
 VIDEOS_START = "<!-- videos:start -->"
 VIDEOS_END = "<!-- videos:end -->"
 VIDEOS_NC = Path(os.environ.get("VIDEOS_DIR", "/mnt/data/ncdata/musicuser/files/Website/videos"))
 STOCK_COPY = [
     "Performance films and song videos. Pieces with a YouTube ID play here; the rest open a search until the official upload is wired in.",
     "Notes on music, physics, and the tools around the work. New categories appear when you add them to a post.",
-    "Add a markdown file to Nextcloud Website/videos with a YouTube URL.",
 ]
 
 def _title(html, fallback):
@@ -57,26 +58,18 @@ def write_html(path, html):
     os.chmod(tmp, 0o644)
     os.replace(tmp, path)
 
+def replace_markers(html, start, end, inner):
+    block = start + "\n" + inner + end
+    if start in html and end in html:
+        return re.sub(re.escape(start) + r"[\s\S]*?" + re.escape(end), block, html, count=1)
+    return html
+
 def strip_stock_copy(html):
     html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
     for phrase in STOCK_COPY:
         html = html.replace(phrase, "")
     html = re.sub(r'<p class="lede">\s*</p>\s*', "", html)
     html = re.sub(r'<p>\s*</p>\s*', "", html)
-    return html
-
-def strip_home_placeholder_videos(html):
-    """Remove stock film/video cards from the homepage. Keep the mascot hero loop."""
-    patterns = [
-        r'<section\b[^>]*\bid=["\']videos["\'][^>]*>[\s\S]*?</section>\s*',
-        r'<section\b[^>]*class=["\'][^"\']*\bvideos\b[^"\']*["\'][^>]*>[\s\S]*?</section>\s*',
-        r'<section\b[^>]*>[\s\S]{0,2500}?<p class=["\']kicker["\']>\s*(?:On film|Videos|Watch|Film|Performance)\s*</p>[\s\S]*?</section>\s*',
-        r'<section\b[^>]*>[\s\S]{0,8000}?(?:video-grid|video-card|/images/videos/|youtube-nocookie|youtube\.com/embed|youtu\.be)[\s\S]*?</section>\s*',
-        r'<article\b[^>]*class=["\'][^"\']*video-card[^"\']*["\'][^>]*>[\s\S]*?</article>\s*',
-        r'<iframe\b[^>]*(?:youtube|youtu\.be)[^>]*>[\s\S]*?</iframe>\s*',
-    ]
-    for pat in patterns:
-        html = re.sub(pat, "", html, flags=re.I)
     return html
 
 def strip_file(path, log):
@@ -162,41 +155,6 @@ def fix_blog_index_cards(root, log):
         write_html(index, html)
         log("updated blog listing")
 
-def sync_home_journal(root, log):
-    home = root / "index.html"
-    if not home.is_file():
-        return
-    posts = iter_posts(root)
-    html = home.read_text(encoding="utf-8")
-    before = html
-    html = strip_stock_copy(html)
-    html = strip_home_placeholder_videos(html)
-    if posts:
-        p = posts[0]
-        img = ('        <img src="%s" alt="%s">\n' % (p["img"], escape(p["title"]))) if p["img"] else ""
-        inner = (
-            JOURNAL_START + "\n"
-            '<section class="wrap section" id="from-the-journal">\n'
-            '  <div class="section-head"><p class="kicker">Journal</p><h2>Latest from the blog</h2></div>\n'
-            '  <article class="journal-teaser">\n'
-            '    <a href="%s">\n%s'
-            '      <h3>%s</h3>\n'
-            '    </a>\n'
-            '  </article>\n'
-            '</section>\n' % (p["href"], img, escape(p["title"]))
-            + JOURNAL_END
-        )
-        if JOURNAL_START in html and JOURNAL_END in html:
-            html = re.sub(re.escape(JOURNAL_START) + r"[\s\S]*?" + re.escape(JOURNAL_END), inner, html, count=1)
-        elif 'id="recent-releases"' in html:
-            html = re.sub(r'(id="recent-releases"[\s\S]*?</section>)', r"\1\n" + inner, html, count=1)
-        elif "</main>" in html:
-            html = html.replace("</main>", inner + "\n</main>", 1)
-        log("homepage journal teaser: %s" % p["slug"])
-    if html != before:
-        write_html(home, html)
-        log("stripped leftover homepage videos; kept mascot hero")
-
 def parse_md(path):
     text = path.read_text(encoding="utf-8")
     meta, body = {}, text.strip()
@@ -245,21 +203,19 @@ def load_videos():
 
 def videos_inner(items):
     if not items:
-        body = ""
-    else:
-        cards = []
-        for it in items:
-            desc = ("<p>%s</p>\n" % escape(it["body"])) if it["body"] else ""
-            cards.append(
-                '<article class="video-card">\n'
-                '  <div class="video-embed">\n'
-                '    <iframe src="https://www.youtube-nocookie.com/embed/%s" title="%s" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n'
-                '  </div>\n'
-                '  <h2>%s</h2>\n%s'
-                '</article>\n' % (it["id"], escape(it["title"]), escape(it["title"]), desc)
-            )
-        body = '<div class="video-grid">\n' + "".join(cards) + '</div>\n'
-    return VIDEOS_START + "\n" + body + VIDEOS_END
+        return VIDEOS_START + "\n" + VIDEOS_END
+    cards = []
+    for it in items:
+        desc = ("<p>%s</p>\n" % escape(it["body"])) if it["body"] else ""
+        cards.append(
+            '<article class="video-card">\n'
+            '  <div class="video-embed">\n'
+            '    <iframe src="https://www.youtube-nocookie.com/embed/%s" title="%s" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n'
+            '  </div>\n'
+            '  <h2>%s</h2>\n%s'
+            '</article>\n' % (it["id"], escape(it["title"]), escape(it["title"]), desc)
+        )
+    return VIDEOS_START + "\n<div class=\"video-grid\">\n" + "".join(cards) + "</div>\n" + VIDEOS_END
 
 def replace_main(html, main_html):
     if re.search(r"<main\b", html, re.I) and "</main>" in html.lower():
@@ -272,6 +228,45 @@ def chrome_from(root):
         if path.is_file():
             return path.read_text(encoding="utf-8", errors="ignore")
     return ""
+
+def sync_home(root, log):
+    home = root / "index.html"
+    if not home.is_file():
+        return
+    html = home.read_text(encoding="utf-8")
+    videos = load_videos()
+    if videos:
+        it = videos[0]
+        video_inner = (
+            '<article class="video-card">\n'
+            '  <div class="video-embed">\n'
+            '    <iframe src="https://www.youtube-nocookie.com/embed/%s" title="%s" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n'
+            '  </div>\n'
+            '  <h3>%s</h3>\n'
+            '</article>\n' % (it["id"], escape(it["title"]), escape(it["title"]))
+        )
+        log("homepage latest video: %s" % it["title"])
+    else:
+        video_inner = ""
+        log("homepage latest video: none in Nextcloud")
+    html = replace_markers(html, HOME_VIDEO_START, HOME_VIDEO_END, video_inner)
+
+    posts = iter_posts(root)
+    if posts:
+        p = posts[0]
+        img = ('      <img src="%s" alt="%s">\n' % (p["img"], escape(p["title"]))) if p["img"] else ""
+        journal_inner = (
+            '  <article class="journal-teaser">\n'
+            '    <a href="%s">\n%s'
+            '      <h3>%s</h3>\n'
+            '    </a>\n'
+            '  </article>\n' % (p["href"], img, escape(p["title"]))
+        )
+        log("homepage journal teaser: %s" % p["slug"])
+    else:
+        journal_inner = ""
+    html = replace_markers(html, JOURNAL_START, JOURNAL_END, journal_inner)
+    write_html(home, html)
 
 def sync_videos(root, log):
     items = load_videos()
@@ -287,10 +282,7 @@ def sync_videos(root, log):
         '  </section>\n'
         '</main>'
     )
-    if dest.is_file():
-        html = dest.read_text(encoding="utf-8")
-    else:
-        html = chrome_from(root)
+    html = dest.read_text(encoding="utf-8") if dest.is_file() else chrome_from(root)
     if not html:
         html = (
             "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -311,7 +303,7 @@ def sync_videos(root, log):
 
 def run(root, blog_nc, log):
     fix_blog_index_cards(root, log)
-    sync_home_journal(root, log)
+    sync_home(root, log)
     sync_videos(root, log)
     for rel in ("contact/index.html", "about/index.html", "blog/index.html"):
         strip_file(root / rel, log)
