@@ -14,6 +14,11 @@ JOURNAL_END = "<!-- journal:end -->"
 VIDEOS_START = "<!-- videos:start -->"
 VIDEOS_END = "<!-- videos:end -->"
 VIDEOS_NC = Path(os.environ.get("VIDEOS_DIR", "/mnt/data/ncdata/musicuser/files/Website/videos"))
+STOCK_COPY = [
+    "Performance films and song videos. Pieces with a YouTube ID play here; the rest open a search until the official upload is wired in.",
+    "Notes on music, physics, and the tools around the work. New categories appear when you add them to a post.",
+    "Add a markdown file to Nextcloud Website/videos with a YouTube URL.",
+]
 
 def _title(html, fallback):
     m = H1_RE.search(html)
@@ -35,7 +40,7 @@ def _abs_img(src, slug, root):
     if not src:
         return None
     if src.startswith("http://") or src.startswith("https://") or src.startswith("/"):
-        if src.startswith("/") and not (root / src.lstrip("/")).exists():
+        if src.startswith("/" ) and not (root / src.lstrip("/")).exists():
             name = Path(src).name
             for cand in (root / "images" / "blog" / name, root / "blog" / slug / name):
                 if cand.exists():
@@ -45,6 +50,29 @@ def _abs_img(src, slug, root):
         if cand.exists():
             return "/" + cand.relative_to(root).as_posix()
     return "/blog/%s/%s" % (slug, src.lstrip("./"))
+
+def write_html(path, html):
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(html, encoding="utf-8")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+
+def strip_stock_copy(html):
+    html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
+    for phrase in STOCK_COPY:
+        html = html.replace(phrase, "")
+    html = re.sub(r'<p class="lede">\s*</p>\s*', "", html)
+    html = re.sub(r'<p>\s*</p>\s*', "", html)
+    return html
+
+def strip_file(path, log):
+    if not path.is_file():
+        return
+    html = path.read_text(encoding="utf-8")
+    new = strip_stock_copy(html)
+    if new != html:
+        write_html(path, new)
+        log("stripped stock copy in %s" % path)
 
 def iter_posts(root):
     blog = root / "blog"
@@ -74,8 +102,8 @@ def fix_blog_index_cards(root, log):
     if not index.is_file():
         return
     posts = {p["slug"]: p for p in iter_posts(root)}
-    html = index.read_text(encoding="utf-8")
-    original = html
+    html = strip_stock_copy(index.read_text(encoding="utf-8"))
+    original = index.read_text(encoding="utf-8")
 
     def fix_article(match):
         block = match.group(0)
@@ -117,48 +145,39 @@ def fix_blog_index_cards(root, log):
             flags=re.I,
         )
     if html != original:
-        tmp = index.with_name("index.html.tmp")
-        tmp.write_text(html, encoding="utf-8")
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, index)
-        log("fixed blog listing card images")
-    else:
-        log("blog listing cards unchanged (no article/img match)")
+        write_html(index, html)
+        log("updated blog listing")
 
 def sync_home_journal(root, log):
     home = root / "index.html"
     if not home.is_file():
         return
     posts = iter_posts(root)
-    if not posts:
-        log("no blog posts for homepage teaser")
-        return
-    p = posts[0]
-    img = ('        <img src="%s" alt="%s">\n' % (p["img"], escape(p["title"]))) if p["img"] else ""
-    inner = (
-        JOURNAL_START + "\n"
-        '<section class="wrap section" id="from-the-journal">\n'
-        '  <div class="section-head"><p class="kicker">Journal</p><h2>Latest from the blog</h2></div>\n'
-        '  <article class="journal-teaser">\n'
-        '    <a href="%s">\n%s'
-        '      <h3>%s</h3>\n'
-        '    </a>\n'
-        '  </article>\n'
-        '</section>\n' % (p["href"], img, escape(p["title"]))
-        + JOURNAL_END
-    )
-    html = home.read_text(encoding="utf-8")
-    if JOURNAL_START in html and JOURNAL_END in html:
-        html = re.sub(re.escape(JOURNAL_START) + r"[\s\S]*?" + re.escape(JOURNAL_END), inner, html, count=1)
-    elif 'id="recent-releases"' in html:
-        html = re.sub(r'(id="recent-releases"[\s\S]*?</section>)', r"\1\n" + inner, html, count=1)
-    elif "</main>" in html:
-        html = html.replace("</main>", inner + "\n</main>", 1)
-    tmp = home.with_name("index.html.tmp")
-    tmp.write_text(html, encoding="utf-8")
-    os.chmod(tmp, 0o644)
-    os.replace(tmp, home)
-    log("homepage journal teaser: %s" % p["slug"])
+    html = strip_stock_copy(home.read_text(encoding="utf-8"))
+    html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
+    if posts:
+        p = posts[0]
+        img = ('        <img src="%s" alt="%s">\n' % (p["img"], escape(p["title"]))) if p["img"] else ""
+        inner = (
+            JOURNAL_START + "\n"
+            '<section class="wrap section" id="from-the-journal">\n'
+            '  <div class="section-head"><p class="kicker">Journal</p><h2>Latest from the blog</h2></div>\n'
+            '  <article class="journal-teaser">\n'
+            '    <a href="%s">\n%s'
+            '      <h3>%s</h3>\n'
+            '    </a>\n'
+            '  </article>\n'
+            '</section>\n' % (p["href"], img, escape(p["title"]))
+            + JOURNAL_END
+        )
+        if JOURNAL_START in html and JOURNAL_END in html:
+            html = re.sub(re.escape(JOURNAL_START) + r"[\s\S]*?" + re.escape(JOURNAL_END), inner, html, count=1)
+        elif 'id="recent-releases"' in html:
+            html = re.sub(r'(id="recent-releases"[\s\S]*?</section>)', r"\1\n" + inner, html, count=1)
+        elif "</main>" in html:
+            html = html.replace("</main>", inner + "\n</main>", 1)
+        log("homepage journal teaser: %s" % p["slug"])
+    write_html(home, html)
 
 def parse_md(path):
     text = path.read_text(encoding="utf-8")
@@ -208,7 +227,7 @@ def load_videos():
 
 def videos_inner(items):
     if not items:
-        body = '<p class="lede">Add a markdown file to Nextcloud <code>Website/videos</code> with a YouTube URL.</p>\n'
+        body = ""
     else:
         cards = []
         for it in items:
@@ -224,8 +243,13 @@ def videos_inner(items):
         body = '<div class="video-grid">\n' + "".join(cards) + '</div>\n'
     return VIDEOS_START + "\n" + body + VIDEOS_END
 
+def replace_main(html, main_html):
+    if re.search(r"<main\b", html, re.I) and "</main>" in html.lower():
+        return re.sub(r"<main\b[^>]*>[\s\S]*?</main>", main_html, html, count=1, flags=re.I)
+    return html
+
 def chrome_from(root):
-    for rel in ("videos/index.html", "about/index.html", "blog/index.html", "index.html"):
+    for rel in ("about/index.html", "contact/index.html", "blog/index.html", "index.html"):
         path = root / rel
         if path.is_file():
             return path.read_text(encoding="utf-8", errors="ignore")
@@ -233,36 +257,47 @@ def chrome_from(root):
 
 def sync_videos(root, log):
     items = load_videos()
-    log("videos: %d from %s" % (len(items), VIDEOS_NC))
+    log("videos from Nextcloud: %d (%s)" % (len(items), VIDEOS_NC))
     dest = root / "videos" / "index.html"
     dest.parent.mkdir(parents=True, exist_ok=True)
     inner = videos_inner(items)
-    html = dest.read_text(encoding="utf-8") if dest.is_file() else chrome_from(root)
+    main = (
+        '<main id="content">\n'
+        '  <section class="wrap section">\n'
+        '    <h1>Videos</h1>\n'
+        + inner +
+        '  </section>\n'
+        '</main>'
+    )
+    if dest.is_file():
+        html = dest.read_text(encoding="utf-8")
+    else:
+        html = chrome_from(root)
     if not html:
         html = (
             "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-            "<title>Videos</title><link rel=\"stylesheet\" href=\"/css/site.css\">"
+            "<title>Videos \u2014 Santa Bayanian</title>"
+            "<link rel=\"stylesheet\" href=\"/css/site.css\">"
             "<link rel=\"stylesheet\" href=\"/css/theme.css\"></head>"
-            "<body><main id=\"content\"></main></body></html>"
+            "<body><main id=\"content\"></main>"
+            "<script src=\"/js/site.js\" defer></script>"
+            "<script src=\"/js/theme.js\" defer></script></body></html>"
         )
-    if VIDEOS_START in html and VIDEOS_END in html:
-        html = re.sub(re.escape(VIDEOS_START) + r"[\s\S]*?" + re.escape(VIDEOS_END), inner, html, count=1)
-    elif "</main>" in html:
-        section = '<section class="wrap section">\n  <h1>Videos</h1>\n' + inner + "\n</section>\n"
-        html = html.replace("</main>", section + "</main>", 1)
-    if 'href="/css/theme.css"' not in html and "</head>" in html:
-        html = html.replace("</head>", '  <link rel="stylesheet" href="/css/theme.css">\n</head>', 1)
-    tmp = dest.with_name("index.html.tmp")
-    tmp.write_text(html, encoding="utf-8")
-    os.chmod(tmp, 0o644)
-    os.replace(tmp, dest)
-    log("wrote %s" % dest)
+    html = replace_main(html, main)
+    html = strip_stock_copy(html)
+    html = html.replace("hello@santabayanian.com", "keith@santabayanian.com")
+    if "<title>" in html:
+        html = re.sub(r"<title>[^<]*</title>", "<title>Videos \u2014 Santa Bayanian</title>", html, count=1)
+    write_html(dest, html)
+    log("rewrote videos page with Nextcloud-only embeds")
 
 def run(root, blog_nc, log):
     fix_blog_index_cards(root, log)
     sync_home_journal(root, log)
     sync_videos(root, log)
+    for rel in ("contact/index.html", "about/index.html", "blog/index.html"):
+        strip_file(root / rel, log)
 
 if __name__ == "__main__":
     root = Path(os.environ.get("BLOG_WEBROOT", os.environ.get("THEME_WEBROOT", "/var/www/santabayanian")))
