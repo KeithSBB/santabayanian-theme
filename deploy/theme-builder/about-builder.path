@@ -1,0 +1,13 @@
+[Unit]
+Description=Watch Nextcloud Website/about markdown
+
+[Path]
+PathChanged=/mnt/data/ncdata/musicuser/files/Website/about.md
+PathModified=/mnt/data/ncdata/musicuser/files/Website/about.md
+PathChanged=/mnt/data/ncdata/musicuser/files/Website/about
+PathModified=/mnt/data/ncdata/musicuser/files/Website/about
+Unit=theme-builder.service
+MakeDirectory=false
+
+[Install]
+WantedBy=multi-user.target
