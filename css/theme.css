@@ -136,6 +136,21 @@ article img,
   border: 0;
 }
 
+.about-photo {
+  margin: 0 0 1.5rem;
+}
+.about-photo img,
+.about-body img {
+  display: block;
+  width: auto;
+  max-width: min(18rem, 100%);
+  height: auto;
+  border-radius: 0.35rem;
+}
+.about-body img {
+  max-width: min(22rem, 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-photo video { display: none; }
 }
