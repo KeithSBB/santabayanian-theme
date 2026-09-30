@@ -139,13 +139,44 @@ article img,
 .about-photo {
   margin: 0 0 1.5rem;
 }
+.about-page .hero,
+.about-page .hero-photo {
+  display: none !important;
+}
 .about-photo img,
 .about-body img {
+  position: static;
+  inset: auto;
+  z-index: auto;
   display: block;
   width: auto;
-  max-width: min(18rem, 100%);
   height: auto;
+  max-width: min(18rem, 100%);
+  object-fit: contain;
   border-radius: 0.35rem;
+}
+.about-body {
+  max-width: 42rem;
+}
+.about-body h2,
+.about-body h3 {
+  font-family: var(--serif, Georgia, serif);
+  margin: 1.6rem 0 0.4rem;
+}
+.about-body p,
+.about-body ul,
+.about-body ol,
+.about-body blockquote {
+  margin: 0 0 1rem;
+}
+.about-body ul,
+.about-body ol {
+  padding-left: 1.25rem;
+}
+.about-body blockquote {
+  border-left: 3px solid var(--accent, #c45c4a);
+  padding-left: 1rem;
+  color: var(--muted, #c9b8a8);
 }
 .about-body img {
   max-width: min(22rem, 100%);
