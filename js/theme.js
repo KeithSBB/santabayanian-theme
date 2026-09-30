@@ -10,7 +10,7 @@
 
   $all(".mascot-band, [data-mascot-reel], [data-theme-atmosphere]").forEach(function (el) { el.remove(); });
   if (!isHome) {
-    $all(".hero-photo").forEach(function (el) { el.remove(); });
+    $all(".hero, .hero-photo").forEach(function (el) { el.remove(); });
   }
 
   if (isBlogPost) {
@@ -80,20 +80,11 @@
     wrap.appendChild(img);
   }
 
-  function applyAbout(theme) {
-    if (!theme.about) return;
-    if (path.indexOf("/about") !== 0) return;
-    $all("[data-about-photo], .about-photo img").forEach(function (el) {
-      if (el.tagName === "IMG") el.src = theme.about;
-    });
-  }
-
   fetch(MANIFEST, { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (theme) {
       applyHomeHero(theme);
       applyBlogTitleMascot(theme);
-      applyAbout(theme);
     })
     .catch(function () {});
 })();
