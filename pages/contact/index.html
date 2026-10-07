@@ -28,22 +28,29 @@
 <main id="content">
   <section class="wrap section">
     <h1>Contact</h1>
-    <p>Email <a href="mailto:keith@santabayanian.com">keith@santabayanian.com</a>.</p>
-    <form action="mailto:keith@santabayanian.com" method="post" enctype="text/plain">
-      <p>
-        <label for="name">Name</label><br>
-        <input id="name" name="name" type="text" required>
-      </p>
-      <p>
-        <label for="email">Email</label><br>
-        <input id="email" name="email" type="email" required>
-      </p>
-      <p>
-        <label for="message">Message</label><br>
-        <textarea id="message" name="message" rows="6" required></textarea>
-      </p>
-      <p><button class="btn" type="submit">Send</button></p>
-    </form>
+    <div style="display:flex; gap:2rem; align-items:flex-start; flex-wrap:wrap;">
+      <div style="flex:1; min-width:280px;">
+        <p>Email <a href="mailto:keith@santabayanian.com">keith@santabayanian.com</a>.</p>
+        <form action="mailto:keith@santabayanian.com" method="post" enctype="text/plain">
+          <p>
+            <label for="name">Name</label><br>
+            <input id="name" name="name" type="text" required>
+          </p>
+          <p>
+            <label for="email">Email</label><br>
+            <input id="email" name="email" type="email" required>
+          </p>
+          <p>
+            <label for="message">Message</label><br>
+            <textarea id="message" name="message" rows="6" required></textarea>
+          </p>
+          <p><button class="btn" type="submit">Send</button></p>
+        </form>
+      </div>
+      <aside style="flex:0 0 300px;">
+        <img src="/images/site/contact.png" alt="Contact" style="max-width:100%; height:auto; border-radius:8px;">
+      </aside>
+    </div>
   </section>
 </main>
 <footer class="site-footer">
