@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /audio/
+Disallow: /images/
+
+Sitemap: https://santabayanian.com/sitemap.xml
